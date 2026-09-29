@@ -1,0 +1,581 @@
+{
+  "id": "364e5c32cef65a73",
+  "name": "InvoiceOps | Xero Draft Post",
+  "nodes": [
+    {
+      "id": "aaddde65-15a4-53c7-bd9a-2dc9c2d1f8ff",
+      "name": "Xero posting note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -320
+      ],
+      "parameters": {
+        "content": "## Connected Xero draft\nConfigure a customer-owned Xero OAuth2 credential and tenant ID before use. Keep this workflow unpublished in DEMO. Xero idempotency keys expire after six minutes, so uncertain outcomes require GET reconciliation before retry.",
+        "height": 190,
+        "width": 480
+      }
+    },
+    {
+      "id": "71a200f1-4641-53b9-9294-23aa84e6363e",
+      "name": "When Xero Draft Claimed",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -760,
+        0
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "16e5c522-3fa8-5b35-831f-59358149cf68",
+      "name": "Create Xero Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -520,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.xero.com/api.xro/2.0/Invoices",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "xeroOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "xero-tenant-id",
+              "value": "={{ $env.XERO_TENANT_ID }}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ $('When Xero Draft Claimed').item.json.operation_key }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {Invoices: [{...$('When Xero Draft Claimed').item.json.bill_payload, Type: 'ACCPAY', Status: 'DRAFT'}]} }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "7b3f8133-57e8-5fae-b47f-49fc2880b849",
+      "name": "Xero Draft Accepted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -280,
+        -80
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c83ecb67-6e34-51d3-9d01-526d844747c2",
+              "leftValue": "={{ $json.statusCode >= 200 && $json.statusCode < 300 && !!$json.body?.Invoices?.[0]?.InvoiceID }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "0a24dc9b-c268-5148-8c61-6d6d193ad668",
+      "name": "Verify Xero Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -40,
+        -180
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/xero/draft-check' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {operation_id: $('When Xero Draft Claimed').item.json.operation_id, attempt: $('When Xero Draft Claimed').item.json.attempt, invoice: $('Create Xero Draft').item.json.body.Invoices[0]} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "208f9021-b87b-53c6-acb7-872ed4bf41a1",
+      "name": "Xero Draft Matches Approval?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        200,
+        -180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b61bcbd5-4945-545e-9c9d-dadbaebdb6c0",
+              "leftValue": "={{ $json.match }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ad472534-93d2-5594-ab2f-d93309bb28ee",
+      "name": "Record Xero Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        -260
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/post/result' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {operation_id: $('When Xero Draft Claimed').item.json.operation_id, attempt: $('When Xero Draft Claimed').item.json.attempt, status: 'accepted', accounting_id: $('Verify Xero Draft').item.json.accounting_id} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "deee3c23-45ea-553c-b4a1-daf446e5b71e",
+      "name": "Record Xero Mismatch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/post/result' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {operation_id: $('When Xero Draft Claimed').item.json.operation_id, attempt: $('When Xero Draft Claimed').item.json.attempt, status: 'uncertain', error: $('Verify Xero Draft').item.json.reason || 'xero_draft_mismatch'} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "213ea31d-b636-5858-8885-1a8b331e2b55",
+      "name": "Archive Posted Xero Invoice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        -260
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/invoices/' + $('When Xero Draft Claimed').item.json.invoice_id + '/archive' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {operation_id: $('When Xero Draft Claimed').item.json.operation_id} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "f9fb0b55-bae7-5041-a060-87236ac84473",
+      "name": "Xero Outcome Uncertain?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -40,
+        20
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5df21883-b7be-52f6-ab38-54b13c49d4b6",
+              "leftValue": "={{ $json.statusCode === 408 || $json.statusCode === 429 || $json.statusCode >= 500 || ($json.statusCode >= 200 && $json.statusCode < 300) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "8c8cad13-354f-5757-a611-37c352849317",
+      "name": "Record Xero Uncertain",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        200,
+        -20
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/post/result' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {operation_id: $('When Xero Draft Claimed').item.json.operation_id, attempt: $('When Xero Draft Claimed').item.json.attempt, status: 'uncertain', error: $('Create Xero Draft').item.json.body?.Message || 'xero_unknown_outcome'} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "f49629ac-14e1-559f-951d-ff1d943ffae0",
+      "name": "Xero Credential Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        200,
+        140
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b94743ad-bf69-5ba4-8a18-b3db353f0e8d",
+              "leftValue": "={{ $json.statusCode === 401 || $json.statusCode === 403 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b7940c06-0970-5a5c-8999-11dfc886e91c",
+      "name": "Record Xero Credential Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/post/result' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {operation_id: $('When Xero Draft Claimed').item.json.operation_id, attempt: $('When Xero Draft Claimed').item.json.attempt, status: 'credential_error', error: $('Create Xero Draft').item.json.body?.Message || 'xero_authentication_failed'} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "711e04f2-4ac1-5372-a15a-8f5c58cf0b42",
+      "name": "Record Xero Rejection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        220
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/post/result' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {operation_id: $('When Xero Draft Claimed').item.json.operation_id, attempt: $('When Xero Draft Claimed').item.json.attempt, status: 'declined', error: $('Create Xero Draft').item.json.body?.Message || 'xero_rejected'} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "65048849-d1ba-5c99-95e9-af7d69dcee5f",
+      "name": "Record Xero Network Uncertainty",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -280,
+        180
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/post/result' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {operation_id: $('When Xero Draft Claimed').item.json.operation_id, attempt: $('When Xero Draft Claimed').item.json.attempt, status: 'uncertain', error: $json.error?.message || 'xero_network_timeout'} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When Xero Draft Claimed": {
+      "main": [
+        [
+          {
+            "node": "Create Xero Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Xero Draft": {
+      "main": [
+        [
+          {
+            "node": "Xero Draft Accepted?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Xero Network Uncertainty",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Xero Draft Accepted?": {
+      "main": [
+        [
+          {
+            "node": "Verify Xero Draft",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Xero Outcome Uncertain?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Xero Draft": {
+      "main": [
+        [
+          {
+            "node": "Xero Draft Matches Approval?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Xero Draft Matches Approval?": {
+      "main": [
+        [
+          {
+            "node": "Record Xero Draft",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Xero Mismatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Xero Draft": {
+      "main": [
+        [
+          {
+            "node": "Archive Posted Xero Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Xero Outcome Uncertain?": {
+      "main": [
+        [
+          {
+            "node": "Record Xero Uncertain",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Xero Credential Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Xero Credential Error?": {
+      "main": [
+        [
+          {
+            "node": "Record Xero Credential Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Xero Rejection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "59bb66e7d1495c09"
+  },
+  "versionId": "8b635a1e-4f84-5e03-889b-8676336a7689",
+  "pinData": {},
+  "tags": []
+}

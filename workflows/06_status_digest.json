@@ -1,0 +1,89 @@
+{
+  "id": "1d06d6198c3c5c93",
+  "name": "InvoiceOps | Status Digest",
+  "nodes": [
+    {
+      "id": "7a2fbf8c-678f-537a-8766-010d8461d82e",
+      "name": "Digest note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -320
+      ],
+      "parameters": {
+        "content": "## Stored status digest\nThe gateway computes counts from persisted business tables. A demo digest is saved in the local outbox; no real message is sent.",
+        "height": 190,
+        "width": 480
+      }
+    },
+    {
+      "id": "968746ea-7a90-5382-bef7-7b6b6066183e",
+      "name": "Every Morning",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -760,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e3c84e3d-8da0-5f81-af0d-c5e22eb8d57f",
+      "name": "Build Stored Status Digest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -520,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/digests/run' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every Morning": {
+      "main": [
+        [
+          {
+            "node": "Build Stored Status Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "59bb66e7d1495c09"
+  },
+  "versionId": "8a36bbb0-8b4e-5ef3-95ad-bf866a25da98",
+  "pinData": {},
+  "tags": []
+}

@@ -1,0 +1,226 @@
+{
+  "id": "72195cee01f2583e",
+  "name": "InvoiceOps | Replay Intake",
+  "nodes": [
+    {
+      "id": "9ca48635-d233-5a4a-a7c7-02e08038fa01",
+      "name": "Replay intake note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -320
+      ],
+      "parameters": {
+        "content": "## Local replay intake\nAuthenticated webhook. The gateway validates the event and file, persists the source, and returns an invoice ID. Acknowledge before the document job runs.",
+        "height": 190,
+        "width": 480
+      }
+    },
+    {
+      "id": "c6b8b969-e395-5d52-94cc-6971b3527190",
+      "name": "Receive Replay Event",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -760,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "invoiceops-intake",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "deda0ff8-f19d-5ebe-9640-3a77ac724f66",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "070bed31-c0ce-517c-ad7d-ffa6cf783fd5",
+      "name": "Register Intake",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -520,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/intake' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ $('Receive Replay Event').first().json.body }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "aa64d5f0-20e6-54d2-9cb1-108f7e304d70",
+      "name": "Already Delivered?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -280,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9afcbadb-8f90-5141-aa42-c9c93a453ed4",
+              "leftValue": "={{ $json.duplicate }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "975b754f-4811-5baa-b149-6fec53e4fc8b",
+      "name": "Respond Duplicate",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -40,
+        -120
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status: 'duplicate', invoice_id: $json.invoice_id} }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "dc094d90-8eb5-596d-a026-cbf4cc0b5727",
+      "name": "Respond Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -40,
+        140
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status: 'accepted', invoice_id: $json.invoice_id} }}",
+        "options": {
+          "responseCode": 202
+        }
+      }
+    },
+    {
+      "id": "d337e547-fc28-5da0-880f-e694ba2af916",
+      "name": "Process Registered Invoice",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        200,
+        140
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "493f098d42b456ae",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Receive Replay Event": {
+      "main": [
+        [
+          {
+            "node": "Register Intake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Register Intake": {
+      "main": [
+        [
+          {
+            "node": "Already Delivered?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already Delivered?": {
+      "main": [
+        [
+          {
+            "node": "Respond Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond Accepted": {
+      "main": [
+        [
+          {
+            "node": "Process Registered Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "59bb66e7d1495c09"
+  },
+  "versionId": "f59d8248-7b02-5b39-8986-43048224d3b9",
+  "pinData": {},
+  "tags": []
+}

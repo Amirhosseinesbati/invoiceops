@@ -1,0 +1,685 @@
+{
+  "id": "cee20a9381065288",
+  "name": "InvoiceOps | Finalize Document",
+  "nodes": [
+    {
+      "id": "c4dbca8c-5232-5ea0-8ca1-23254937fe4c",
+      "name": "Finalize document note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -320
+      ],
+      "parameters": {
+        "content": "## Match and route completed job\nThis reusable sub-workflow receives invoice_id and job_id. Route and failure endpoints are idempotent, so a repeated callback and scheduled recovery converge on one approval/exception record. ACK is last.",
+        "height": 190,
+        "width": 480
+      }
+    },
+    {
+      "id": "4deb0e5d-4e92-5761-ad3b-797c39f0db2e",
+      "name": "When Job Completion Arrives",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -760,
+        0
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "58cec129-2dfe-5814-a13b-b69c4c1002d6",
+      "name": "Read Final Job State",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -520,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/jobs/' + $('When Job Completion Arrives').item.json.job_id + '' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "db1f0bc1-c6c2-54bc-a931-6af8ed031597",
+      "name": "Job Ready for Validation?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -280,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5fb698b9-f17b-5f3b-b3bc-a85b68d2fb78",
+              "leftValue": "={{ $json.status === 'completed' || $json.status === 'review' }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d905a643-d92f-5a90-988c-602a9ebc5654",
+      "name": "Job Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -40,
+        180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7f797b48-67b9-5dca-adfd-b88fbfa187bf",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "failed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "454c8d25-f79c-59ed-b483-090dc0978b8f",
+      "name": "Record Failed Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        200,
+        180
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/invoices/' + $('When Job Completion Arrives').item.json.invoice_id + '/processing-failed' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {job_id: $('When Job Completion Arrives').item.json.job_id, reason: $('Read Final Job State').item.json.failure_reason || 'extraction_failed'} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "354343ca-e466-57e6-8d0c-ca67b2eeb7b6",
+      "name": "Acknowledge Failed Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        180
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/jobs/' + $('When Job Completion Arrives').item.json.job_id + '/ack' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "e0ede768-cc78-5d1a-97e4-5da214e868a3",
+      "name": "Validate and Match",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -40,
+        -160
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/invoices/' + $('When Job Completion Arrives').item.json.invoice_id + '/validate' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {job_id: $('When Job Completion Arrives').item.json.job_id} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "dc787ee1-42b9-59a1-9be0-fd7f1d67806e",
+      "name": "Stale Completion?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        200,
+        -160
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3c7e1e5d-695c-5422-9ce9-81bef360ab58",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "stale",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "bbcbdc67-4622-50fd-a922-4c12fcc4f933",
+      "name": "Acknowledge Stale Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        -400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/jobs/' + $('When Job Completion Arrives').item.json.job_id + '/ack' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "ed582216-8c74-5e79-93d1-432facc7daa2",
+      "name": "Exception Route?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        -160
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b6548abb-3cc9-53e4-b19d-acb0c48a687a",
+              "leftValue": "={{ $json.route }}",
+              "rightValue": "exception",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "878525e2-6daf-5ca7-a4e5-5eaddb6207e8",
+      "name": "Open Exception Queue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        -260
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/invoices/' + $('When Job Completion Arrives').item.json.invoice_id + '/route' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {route: 'exception', validation_version: $('Validate and Match').item.json.validation_version} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "427ebba8-c0e9-57c4-870f-665c485a12f0",
+      "name": "Manager Route?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        680,
+        -80
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a97e50f1-81c4-55a2-82db-76a9c102e25f",
+              "leftValue": "={{ $json.route }}",
+              "rightValue": "manager_and_reviewer",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e7c88f5a-c8ba-5a3a-99cb-20c495fc2487",
+      "name": "Request Manager and Reviewer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        -160
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/invoices/' + $('When Job Completion Arrives').item.json.invoice_id + '/route' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {route: 'manager_and_reviewer', validation_version: $('Validate and Match').item.json.validation_version} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "f33b9370-e929-5ae2-8afd-66221f6fe899",
+      "name": "Request Reviewer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        20
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/invoices/' + $('When Job Completion Arrives').item.json.invoice_id + '/route' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {route: 'reviewer', validation_version: $('Validate and Match').item.json.validation_version} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "7858bc49-c495-5c18-a119-4674772036bd",
+      "name": "Acknowledge Exception Route",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        -300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/jobs/' + $('When Job Completion Arrives').item.json.job_id + '/ack' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "38439d65-d8c4-5c0a-9234-ea318be10ee2",
+      "name": "Acknowledge Manager Route",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1160,
+        -160
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/jobs/' + $('When Job Completion Arrives').item.json.job_id + '/ack' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "853f3388-cbc6-5302-9e1b-ff2c62df7ef8",
+      "name": "Acknowledge Reviewer Route",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1160,
+        20
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/jobs/' + $('When Job Completion Arrives').item.json.job_id + '/ack' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "da719d6c-9866-54e4-bb36-d6c35135cfbb",
+      "name": "Still Running",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        200,
+        340
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "When Job Completion Arrives": {
+      "main": [
+        [
+          {
+            "node": "Read Final Job State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Final Job State": {
+      "main": [
+        [
+          {
+            "node": "Job Ready for Validation?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job Ready for Validation?": {
+      "main": [
+        [
+          {
+            "node": "Validate and Match",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Job Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job Failed?": {
+      "main": [
+        [
+          {
+            "node": "Record Failed Job",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Still Running",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Failed Job": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge Failed Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and Match": {
+      "main": [
+        [
+          {
+            "node": "Stale Completion?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stale Completion?": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge Stale Job",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Exception Route?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exception Route?": {
+      "main": [
+        [
+          {
+            "node": "Open Exception Queue",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Manager Route?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Open Exception Queue": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge Exception Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manager Route?": {
+      "main": [
+        [
+          {
+            "node": "Request Manager and Reviewer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Request Reviewer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request Manager and Reviewer": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge Manager Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request Reviewer": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge Reviewer Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "59bb66e7d1495c09"
+  },
+  "versionId": "b34f8c24-fb54-5f0a-8227-fa1d96afea1d",
+  "pinData": {},
+  "tags": []
+}

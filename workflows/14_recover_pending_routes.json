@@ -1,0 +1,325 @@
+{
+  "id": "486daba9c81759ff",
+  "name": "InvoiceOps | Recover Pending Routes",
+  "nodes": [
+    {
+      "id": "5e39d3bf-edca-5e6f-84d3-5d1a834269e6",
+      "name": "Route recovery note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -320
+      ],
+      "parameters": {
+        "content": "## Recover resolved exceptions\nA lost portal callback cannot strand a validated invoice. The gateway lists pending routes and rechecks the current route and validation version before creating approvals or exceptions.",
+        "height": 190,
+        "width": 480
+      }
+    },
+    {
+      "id": "ef8b05cc-de4d-56dd-ae0f-762e645027d2",
+      "name": "Every Two Minutes For Routes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -760,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f85b3de3-45bf-529a-ab44-1b9c79c8dd46",
+      "name": "List Pending Routes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -520,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/recovery/pending-routes' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "8420e33d-f477-5455-967a-8f6d774ab729",
+      "name": "Read Recovered Routing State",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -280,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/invoices/' + $json.invoice_id + '/routing-state' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "aaafe2d3-8699-5520-a164-06c9e82d9b54",
+      "name": "Recovered Exception?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -40,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e51d867f-c592-5d92-8206-2fd84c2dcb20",
+              "leftValue": "={{ $json.route }}",
+              "rightValue": "exception",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "200dec9a-23db-506c-b49d-d5d3342f3ab2",
+      "name": "Route Recovered Exception",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        200,
+        -180
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/invoices/' + $('List Pending Routes').item.json.invoice_id + '/route' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {route: 'exception', validation_version: $('List Pending Routes').item.json.validation_version} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "15b829f1-6539-541c-9fb3-1e9bc63ca31f",
+      "name": "Recovered Manager Route?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        200,
+        40
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6db87080-d938-52e6-b173-9ae435c1b296",
+              "leftValue": "={{ $json.route }}",
+              "rightValue": "manager_and_reviewer",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c2e6b3e3-0615-546e-9691-a9eff7831865",
+      "name": "Route Recovered Manager Case",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        -40
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/invoices/' + $('List Pending Routes').item.json.invoice_id + '/route' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {route: 'manager_and_reviewer', validation_version: $('List Pending Routes').item.json.validation_version} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "c7966e39-b2bc-5186-9235-fed09665eae4",
+      "name": "Route Recovered Reviewer Case",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        140
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/invoices/' + $('List Pending Routes').item.json.invoice_id + '/route' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {route: 'reviewer', validation_version: $('List Pending Routes').item.json.validation_version} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every Two Minutes For Routes": {
+      "main": [
+        [
+          {
+            "node": "List Pending Routes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Pending Routes": {
+      "main": [
+        [
+          {
+            "node": "Read Recovered Routing State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Recovered Routing State": {
+      "main": [
+        [
+          {
+            "node": "Recovered Exception?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recovered Exception?": {
+      "main": [
+        [
+          {
+            "node": "Route Recovered Exception",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Recovered Manager Route?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recovered Manager Route?": {
+      "main": [
+        [
+          {
+            "node": "Route Recovered Manager Case",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Route Recovered Reviewer Case",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "59bb66e7d1495c09"
+  },
+  "versionId": "44a66c7c-4ad0-517f-a795-5f2a1acd6f09",
+  "pinData": {},
+  "tags": []
+}

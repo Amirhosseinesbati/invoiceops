@@ -1,0 +1,86 @@
+{
+  "id": "493f098d42b456ae",
+  "name": "InvoiceOps | Process Document",
+  "nodes": [
+    {
+      "id": "4ac889fe-5ef1-5179-b39a-34c02a08abfe",
+      "name": "Document processing note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -320
+      ],
+      "parameters": {
+        "content": "## Start asynchronous extraction\nThe job API persists the invoice job and returns promptly. An authenticated job-completion callback or scheduled recovery later resumes n8n; no in-memory short Wait is used.",
+        "height": 190,
+        "width": 480
+      }
+    },
+    {
+      "id": "00a9ee58-f306-5452-8c7c-afde9bb4ffd8",
+      "name": "When Invoice Registered",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -760,
+        0
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "4fec3af8-63c8-5b6e-9b4d-36c0987a8901",
+      "name": "Submit Extraction Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -520,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/jobs' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {invoice_id: $('When Invoice Registered').item.json.invoice_id} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When Invoice Registered": {
+      "main": [
+        [
+          {
+            "node": "Submit Extraction Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "59bb66e7d1495c09"
+  },
+  "versionId": "f0eb66e8-3d9f-5d6c-bea0-9295e3c04abf",
+  "pinData": {},
+  "tags": []
+}

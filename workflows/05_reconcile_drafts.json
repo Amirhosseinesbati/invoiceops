@@ -1,0 +1,407 @@
+{
+  "id": "ade829b6e8b657b8",
+  "name": "InvoiceOps | Reconcile Drafts",
+  "nodes": [
+    {
+      "id": "344803e9-8843-5285-bab2-c35020452de2",
+      "name": "Reconciliation note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -320
+      ],
+      "parameters": {
+        "content": "## Reconcile before retry\nEvery uncertain operation is looked up by its immutable operation key. The API decides whether a retry is safe after the lookup; this workflow never blindly posts another bill.",
+        "height": 190,
+        "width": 480
+      }
+    },
+    {
+      "id": "3c98624b-0fb0-56ac-8b41-5cb8df87ef9e",
+      "name": "Every Five Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -760,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e999c9be-b687-521a-a6e0-9fb6e664d3e8",
+      "name": "Using Demo Accounting?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -520,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2a8c0a08-7b52-55f9-838b-9bfe8fa22ecc",
+              "leftValue": "={{ $env.INVOICEOPS_ACCOUNTING_PROVIDER || 'demo' }}",
+              "rightValue": "demo",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "0c6d0412-b8c8-5849-8547-c68f5bfaf5b7",
+      "name": "List Uncertain Operations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -280,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/reconcile/uncertain' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "e247a73c-7ba2-5dd9-b3c3-c3172a247624",
+      "name": "Connected Reconciliation Elsewhere",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        180
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "d4ea597a-c036-54d7-8eec-4fa9af85da25",
+      "name": "Look Up Existing Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -40,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/sim/accounting/bills/by-operation/' + $json.operation_key + '' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "27ed4063-e362-5c7f-b1fc-7764cb399f14",
+      "name": "Lookup Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        200,
+        -80
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "abf58b13-ea22-50a7-a030-2b036e176a75",
+              "leftValue": "={{ $json.statusCode >= 200 && $json.statusCode < 300 && typeof $json.body?.found === 'boolean' && (!$json.body.found || (typeof $json.body.accounting_id === 'string' && !!$json.body.accounting_id)) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "562b4cee-78e4-5bf1-a38e-c2c2241d5e16",
+      "name": "Record Reconciliation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        -160
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/reconcile/result' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {operation_id: $('List Uncertain Operations').item.json.operation_id, found: $json.body.found, accounting_id: $json.body.accounting_id || null} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "414f9a83-fc53-513b-b4e4-2cb07e5aa1d4",
+      "name": "Reconciled Draft Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        680,
+        -160
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b4f625c4-37b9-5769-a8b7-cacc097c8b60",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "draft_created",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c00fba54-e062-5250-bc9b-8ea8c96781d8",
+      "name": "Archive Reconciled Invoice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        -200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/invoices/' + $('List Uncertain Operations').item.json.invoice_id + '/archive' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {operation_id: $('List Uncertain Operations').item.json.operation_id} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "82263504-7393-52ba-b8f3-7e2627516bbc",
+      "name": "Record Lookup Failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/workflow-errors' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {workflow_id: String($workflow.id || 'unknown'), execution_id: String($execution.id || 'unknown'), stage: 'reconcile_lookup', message: ('lookup_failed_' + ($json.statusCode || $json.error?.message || 'network')).slice(0, 500)} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every Five Minutes": {
+      "main": [
+        [
+          {
+            "node": "Using Demo Accounting?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Using Demo Accounting?": {
+      "main": [
+        [
+          {
+            "node": "List Uncertain Operations",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Connected Reconciliation Elsewhere",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Uncertain Operations": {
+      "main": [
+        [
+          {
+            "node": "Look Up Existing Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Look Up Existing Draft": {
+      "main": [
+        [
+          {
+            "node": "Lookup Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Lookup Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Record Reconciliation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Lookup Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Reconciliation": {
+      "main": [
+        [
+          {
+            "node": "Reconciled Draft Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reconciled Draft Found?": {
+      "main": [
+        [
+          {
+            "node": "Archive Reconciled Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "59bb66e7d1495c09"
+  },
+  "versionId": "d1cca6f4-79e0-5c46-8c72-53b26875af8a",
+  "pinData": {},
+  "tags": []
+}

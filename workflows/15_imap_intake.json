@@ -1,0 +1,212 @@
+{
+  "id": "f992d28bdd435601",
+  "name": "InvoiceOps | IMAP Intake",
+  "nodes": [
+    {
+      "id": "5fa3ddfd-d469-5d53-bcc5-fe6c1b49eb3d",
+      "name": "IMAP intake note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -320
+      ],
+      "parameters": {
+        "content": "## Connected mailbox intake\nUnpublished until a customer-owned IMAP credential and workspace ID are configured. Each supported attachment becomes a versioned intake event. Inspect mailbox redelivery policy before publishing.",
+        "height": 190,
+        "width": 480
+      }
+    },
+    {
+      "id": "8c8538d8-f073-5ea0-b783-a0a84fcd2f86",
+      "name": "Watch Invoice Mailbox",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2.2,
+      "position": [
+        -760,
+        0
+      ],
+      "parameters": {
+        "mailbox": "INBOX",
+        "postProcessAction": "nothing",
+        "format": "resolved",
+        "dataPropertyAttachmentsPrefixName": "attachment_",
+        "options": {
+          "trackLastMessageId": true
+        }
+      }
+    },
+    {
+      "id": "bb3bb4fd-5207-582d-9b0a-2d9cd66ccc49",
+      "name": "Encode Mail Attachments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -520,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const out = [];\nconst items = $input.all();\nfor (let i = 0; i < items.length; i++) {\n  const item = items[i];\n  const messageId = String(item.json.messageId || item.json.attributes?.uid || '').replace(/[<>]/g, '');\n  if (!messageId) throw new Error('imap_message_identity_missing');\n  for (const [key, meta] of Object.entries(item.binary || {})) {\n    const data = await this.helpers.getBinaryDataBuffer(i, key);\n    if (data.length > 8 * 1024 * 1024) throw new Error('imap_attachment_exceeds_8mb');\n    const mime = data.subarray(0, 5).toString('ascii') === '%PDF-' ? 'application/pdf'\n      : data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47 ? 'image/png'\n      : data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff ? 'image/jpeg' : '';\n    if (!mime) continue;\n    const sourceId = (messageId + ':' + key).slice(0, 150);\n    out.push({json: {event_id: 'imap:' + sourceId, source_system: 'imap', source_id: sourceId,\n      filename: String(meta.fileName || key).slice(0, 160), mime_type: mime,\n      content_base64: data.toString('base64'), received_at: item.json.date || new Date().toISOString()}});\n  }\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "a633e3cc-4f29-5fd5-a46a-1c1c2fb83615",
+      "name": "Register IMAP Invoice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -280,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/intake' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {...$json, workspace_id: $env.INVOICEOPS_CONNECTED_WORKSPACE_ID} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "95539810-a928-556a-9939-c596901f8d70",
+      "name": "IMAP Redelivery?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -40,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "292f7f87-6a67-5eec-83e5-7f989e2a55a4",
+              "leftValue": "={{ $json.duplicate }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "24e9477f-4fe7-504e-bbc9-d875925c68f3",
+      "name": "Ignore IMAP Redelivery",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        200,
+        -100
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "9f96c8ad-2f74-5198-aa7c-f04f0e6afba7",
+      "name": "Process IMAP Invoice",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        200,
+        100
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "493f098d42b456ae",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Watch Invoice Mailbox": {
+      "main": [
+        [
+          {
+            "node": "Encode Mail Attachments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encode Mail Attachments": {
+      "main": [
+        [
+          {
+            "node": "Register IMAP Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Register IMAP Invoice": {
+      "main": [
+        [
+          {
+            "node": "IMAP Redelivery?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IMAP Redelivery?": {
+      "main": [
+        [
+          {
+            "node": "Ignore IMAP Redelivery",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process IMAP Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "59bb66e7d1495c09"
+  },
+  "versionId": "3575a972-f194-561f-ac95-60f2fbdc58e4",
+  "pinData": {},
+  "tags": []
+}

@@ -1,0 +1,83 @@
+{
+  "id": "59bb66e7d1495c09",
+  "name": "InvoiceOps | Shared Error Handler",
+  "nodes": [
+    {
+      "id": "5cfa21ed-eaf6-5ee5-a851-8b1597f7c365",
+      "name": "Error handler note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -320
+      ],
+      "parameters": {
+        "content": "## Failure ledger\nn8n Error Trigger runs on failed triggered executions. Manual editor tests are not proof. The gateway logs the failure and execution IDs; an invoice exception requires an invoice_id correlation field.",
+        "height": 190,
+        "width": 480
+      }
+    },
+    {
+      "id": "aa8ebc6e-30a4-541c-a686-482091d7285e",
+      "name": "On Workflow Error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "70ee710b-4e87-5478-a6a4-a327cbe6230a",
+      "name": "Record Workflow Failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -520,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/workflow-errors' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {workflow_id: String($json.workflow?.id || 'unknown'), execution_id: String($json.execution?.id || 'unknown'), message: String($json.execution?.error?.message || $json.trigger?.error?.message || 'workflow_failure').slice(0, 500), stage: String($json.execution?.lastNodeExecuted || 'trigger')} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "On Workflow Error": {
+      "main": [
+        [
+          {
+            "node": "Record Workflow Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "versionId": "5ad0b995-0ace-5a6a-824a-86d767e69b76",
+  "pinData": {},
+  "tags": []
+}

@@ -1,0 +1,292 @@
+{
+  "id": "26f91ee11c615a61",
+  "name": "InvoiceOps | Approval Resume",
+  "nodes": [
+    {
+      "id": "2ab1aa7d-66b6-5d81-be6a-fa554a9ad4b0",
+      "name": "Approval resume note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -320
+      ],
+      "parameters": {
+        "content": "## Portal decision callback\nThe portal commits an authenticated, version-bound approval first. This authenticated internal webhook only prompts n8n to claim a draft operation. The gateway rechecks all blockers atomically.",
+        "height": 190,
+        "width": 480
+      }
+    },
+    {
+      "id": "741a3d60-ce91-53af-abc0-33b67c819ca1",
+      "name": "Receive Committed Decision",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -760,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "invoiceops-approval",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "24005d94-50ac-5b9e-be9f-b9007e4b77b1",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "7732d398-d1a9-5646-a8af-87a4a6946cc1",
+      "name": "Acknowledge Decision",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -520,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status: 'queued', invoice_id: $json.body.invoice_id} }}",
+        "options": {
+          "responseCode": 202
+        }
+      }
+    },
+    {
+      "id": "5bd17ff4-c06c-5ad8-bf42-88dbcdf2cf5b",
+      "name": "Claim Draft Operation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -280,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/post/claim' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {invoice_id: $('Receive Committed Decision').first().json.body.invoice_id} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "464560ba-46c7-527e-a624-42314ec1fd11",
+      "name": "Draft Claim Granted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -40,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8b7ddae6-f329-5dfc-9699-ffc14de5285d",
+              "leftValue": "={{ $json.claimed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "4648c3ff-e77e-5351-a442-9913b7e1d50b",
+      "name": "Use Xero Posting?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        200,
+        -120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "254d1556-1455-5416-bb8b-d8ccfa29f765",
+              "leftValue": "={{ $env.INVOICEOPS_ACCOUNTING_PROVIDER || 'demo' }}",
+              "rightValue": "xero",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "8e698da4-5219-5890-9459-a512d5c7a36b",
+      "name": "Create Xero Draft After Approval",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        440,
+        -220
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "364e5c32cef65a73",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "6b11fa68-6cf6-5beb-9547-7476e0590a2b",
+      "name": "Create Demo Draft",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        440,
+        -20
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "3eea8425d81c54c7",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "9f712cc5-6772-5523-8525-cb62315b9006",
+      "name": "No Posting Allowed",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        200,
+        120
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Receive Committed Decision": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acknowledge Decision": {
+      "main": [
+        [
+          {
+            "node": "Claim Draft Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Draft Operation": {
+      "main": [
+        [
+          {
+            "node": "Draft Claim Granted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft Claim Granted?": {
+      "main": [
+        [
+          {
+            "node": "Use Xero Posting?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Posting Allowed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Xero Posting?": {
+      "main": [
+        [
+          {
+            "node": "Create Xero Draft After Approval",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Demo Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "59bb66e7d1495c09"
+  },
+  "versionId": "96331a54-9e72-559d-af8e-df64d56ce176",
+  "pinData": {},
+  "tags": []
+}

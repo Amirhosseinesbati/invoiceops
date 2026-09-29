@@ -1,0 +1,665 @@
+{
+  "id": "2f72b4f25aec57d1",
+  "name": "InvoiceOps | Reconcile Xero Drafts",
+  "nodes": [
+    {
+      "id": "744c1db4-99c7-5b6b-aae9-3e5f2a4f2f0a",
+      "name": "Xero reconciliation note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -320
+      ],
+      "parameters": {
+        "content": "## Connected lookup before retry\nUnpublished in DEMO. Search the tenant by exact invoice number and contact, verify draft identity and amounts against the approved version, then resolve uncertainty. Ambiguous responses remain uncertain for operator investigation.",
+        "height": 190,
+        "width": 480
+      }
+    },
+    {
+      "id": "b72c48df-2240-5d57-9a33-996cd0b81838",
+      "name": "Every Five Minutes For Xero",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -760,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c80c6d9a-830e-522a-b87c-c00ff79bbece",
+      "name": "Using Xero Accounting?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -520,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e30ee7cc-95a8-5705-80e1-b9eeb188a7e1",
+              "leftValue": "={{ $env.INVOICEOPS_ACCOUNTING_PROVIDER || 'demo' }}",
+              "rightValue": "xero",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a56abfca-c773-5f2a-9aec-ee5d90bd9ea2",
+      "name": "Skip Xero Lookup In Demo",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        180
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "8c6b4153-0ff9-5a69-8bb3-b12430e91c79",
+      "name": "List Xero Uncertain Operations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -280,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/reconcile/uncertain' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "383be42a-8930-5c48-82a8-fef0315f03cf",
+      "name": "Read Xero Reconcile Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -40,
+        -160
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/reconcile/xero-context/' + $json.operation_id + '' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "623fcec2-7a5a-5bf6-ab4f-6d5ec6665dec",
+      "name": "Look Up Xero Invoice Number",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -40,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.xero.com/api.xro/2.0/Invoices",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "xeroOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "xero-tenant-id",
+              "value": "={{ $env.XERO_TENANT_ID }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "InvoiceNumbers",
+              "value": "={{ $('Read Xero Reconcile Context').item.json.invoice_number }}"
+            },
+            {
+              "name": "ContactIDs",
+              "value": "={{ $('Read Xero Reconcile Context').item.json.contact_id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "5abc4496-b381-59f6-bfc1-c775a52b4c71",
+      "name": "Classify Xero Lookup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const context = $('Read Xero Reconcile Context').item.json;\nconst response = $input.item.json;\nconst invoices = response.body?.Invoices;\nif (response.statusCode !== 200 || !Array.isArray(invoices) ||\n    Number(response.body?.pagination?.pageCount || 1) > 1) {\n  return {json: {...context, lookup: 'error', reason: 'xero_lookup_incomplete'}};\n}\nconst matches = invoices.filter(bill => bill.Type === 'ACCPAY' &&\n  bill.InvoiceNumber === context.invoice_number &&\n  bill.Contact?.ContactID === context.contact_id);\nif (matches.length === 0 && invoices.length === 0) {\n  return {json: {...context, lookup: 'absent'}};\n}\nif (matches.length !== 1 || invoices.length !== 1) {\n  return {json: {...context, lookup: 'error', reason: 'xero_lookup_ambiguous'}};\n}\nreturn {json: {...context, lookup: 'present', invoice: matches[0]}};"
+      }
+    },
+    {
+      "id": "48d74ca3-ac79-52a1-82c5-6a87f67c75b0",
+      "name": "Xero Draft Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        -80
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cdb08294-6215-5360-9de7-47addd3c6091",
+              "leftValue": "={{ $json.lookup }}",
+              "rightValue": "present",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "140858f1-f7ab-5e2a-a431-a12741dd925e",
+      "name": "Xero Draft Absent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        680,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9a818516-fe0a-55c9-9139-45fcb7d2f889",
+              "leftValue": "={{ $json.lookup }}",
+              "rightValue": "absent",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "1851ea2b-480a-5dbc-9ce7-d3a701cadf69",
+      "name": "Verify Reconciled Xero Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        -180
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/xero/draft-check' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {operation_id: $json.operation_id, attempt: $json.attempt, invoice: $json.invoice} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "d8ae2b1d-7bd5-5a2a-8bbd-e5fcc9508851",
+      "name": "Xero Reconciled Fields Match?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        920,
+        -180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d159df90-6cb0-58c0-8172-b76406146a7d",
+              "leftValue": "={{ $json.match }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "2eba79bb-e992-539e-ad5c-9b92b95e466c",
+      "name": "Record Xero Reconciliation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1160,
+        -260
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/reconcile/result' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {operation_id: $('Read Xero Reconcile Context').item.json.operation_id, found: true, accounting_id: $json.accounting_id} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "81fbdcfc-44b3-5b4e-9ad1-e7d943218acb",
+      "name": "Archive Reconciled Xero Invoice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1400,
+        -260
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/invoices/' + $('Read Xero Reconcile Context').item.json.invoice_id + '/archive' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "0d2abbf7-eba5-5637-860a-8fee56357f45",
+      "name": "Record Absent Xero Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        60
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/reconcile/result' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {operation_id: $json.operation_id, found: false} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "ad709822-0829-50c0-a490-e28959185e5f",
+      "name": "Flag Xero Verification Mismatch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1160,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/workflow-errors' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {invoice_id: $('Read Xero Reconcile Context').item.json.invoice_id, workflow_id: String($workflow.id || 'unknown'), execution_id: String($execution.id || 'unknown'), stage: 'xero_reconcile_verify', message: 'Xero draft identity or amount differs from approved invoice'} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "1f2d8736-f100-5951-b79e-532f14a2864e",
+      "name": "Flag Ambiguous Xero Lookup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        220
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/workflow-errors' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {invoice_id: $('Read Xero Reconcile Context').item.json.invoice_id, workflow_id: String($workflow.id || 'unknown'), execution_id: String($execution.id || 'unknown'), stage: 'xero_reconcile_lookup', message: $json.reason || 'xero_lookup_ambiguous'} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "6727dabc-b65d-5c82-b0e1-a4f75e759b5d",
+      "name": "Flag Xero Transport Failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        200,
+        220
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/workflow-errors' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {invoice_id: $('Read Xero Reconcile Context').item.json.invoice_id, workflow_id: String($workflow.id || 'unknown'), execution_id: String($execution.id || 'unknown'), stage: 'xero_reconcile_transport', message: String($json.error?.message || $json.statusCode || 'xero_transport_failed').slice(0, 500)} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every Five Minutes For Xero": {
+      "main": [
+        [
+          {
+            "node": "Using Xero Accounting?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Using Xero Accounting?": {
+      "main": [
+        [
+          {
+            "node": "List Xero Uncertain Operations",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip Xero Lookup In Demo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Xero Uncertain Operations": {
+      "main": [
+        [
+          {
+            "node": "Read Xero Reconcile Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Xero Reconcile Context": {
+      "main": [
+        [
+          {
+            "node": "Look Up Xero Invoice Number",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Look Up Xero Invoice Number": {
+      "main": [
+        [
+          {
+            "node": "Classify Xero Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Flag Xero Transport Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Xero Lookup": {
+      "main": [
+        [
+          {
+            "node": "Xero Draft Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Xero Draft Found?": {
+      "main": [
+        [
+          {
+            "node": "Verify Reconciled Xero Draft",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Xero Draft Absent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Reconciled Xero Draft": {
+      "main": [
+        [
+          {
+            "node": "Xero Reconciled Fields Match?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Xero Reconciled Fields Match?": {
+      "main": [
+        [
+          {
+            "node": "Record Xero Reconciliation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Flag Xero Verification Mismatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Xero Reconciliation": {
+      "main": [
+        [
+          {
+            "node": "Archive Reconciled Xero Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Xero Draft Absent?": {
+      "main": [
+        [
+          {
+            "node": "Record Absent Xero Draft",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Flag Ambiguous Xero Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "59bb66e7d1495c09"
+  },
+  "versionId": "6636f145-75f7-5a46-b23a-291e38315c21",
+  "pinData": {},
+  "tags": []
+}

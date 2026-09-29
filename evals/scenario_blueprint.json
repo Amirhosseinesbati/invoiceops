@@ -1,0 +1,29 @@
+{
+  "schema_version": "invoiceops.synthetic.v1",
+  "generator": "scripts/generate_invoiceops_data.py",
+  "seed": 10410,
+  "reference_date": "2026-09-28",
+  "scenario_counts": {
+    "development": 30,
+    "held_out": 70
+  },
+  "development_groups": {
+    "vendor_ids": "vendor-001 through vendor-006",
+    "layouts": ["classic_grid", "sidebar_summary", "compact_ledger"],
+    "entrypoint_family": ["mailbox"]
+  },
+  "held_out_groups": {
+    "vendor_ids": "vendor-007 through vendor-018",
+    "layouts": ["header_band", "boxed_totals", "minimal_statement", "warehouse_slip", "modern_split"],
+    "entrypoint_family": ["drive", "webhook"]
+  },
+  "input_fields": ["case_id", "split", "event_id", "document_path", "entrypoint", "schema_version"],
+  "private_label_fields": [
+    "case_id", "split", "invoice_id", "vendor_id", "layout", "is_scanned",
+    "expected_header", "expected_line_items", "expected_outcome",
+    "expected_blocking_finding", "expected_approval_roles",
+    "draft_allowed_after_required_approvals", "expected_draft_count_after_required_approvals",
+    "source_evidence"
+  ],
+  "rule": "Use document/event references as inputs. Compare outputs with evaluation_private labels only after the workflow completes."
+}

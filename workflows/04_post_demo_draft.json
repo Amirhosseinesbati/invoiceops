@@ -1,0 +1,453 @@
+{
+  "id": "3eea8425d81c54c7",
+  "name": "InvoiceOps | Post Demo Draft",
+  "nodes": [
+    {
+      "id": "98721c6e-f24a-5388-8718-4be58c919a2a",
+      "name": "Draft posting note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -320
+      ],
+      "parameters": {
+        "content": "## Simulated accounting write\nA transactionally claimed operation is the only input. A timeout is uncertain; reconciliation must look up an existing bill before any resend. No payment operation exists.",
+        "height": 190,
+        "width": 480
+      }
+    },
+    {
+      "id": "27527ea7-518b-5426-a501-cea376ae17c9",
+      "name": "When Draft Claimed",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -760,
+        0
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "ecfad98d-d6a8-5c22-9b60-f2752c83b7f6",
+      "name": "Create Simulated Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -520,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/sim/accounting/bills' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {operation_key: $('When Draft Claimed').item.json.operation_key, workspace_id: $('When Draft Claimed').item.json.workspace_id, vendor_id: $('When Draft Claimed').item.json.vendor_id, invoice_number: $('When Draft Claimed').item.json.invoice_number, amount: $('When Draft Claimed').item.json.amount, currency: $('When Draft Claimed').item.json.currency, bill_payload: $('When Draft Claimed').item.json.bill_payload} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "81f23c08-d8dc-5701-a812-4958b5719a20",
+      "name": "Draft Accepted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -280,
+        -80
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "529af6b7-69a7-52eb-85c9-7d9582f908b9",
+              "leftValue": "={{ $json.statusCode >= 200 && $json.statusCode < 300 && $json.body.status === 'accepted' && !!$json.body.accounting_id }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c82723a1-c7ae-51b1-a738-41fa7ad8d356",
+      "name": "Record Draft Created",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -40,
+        -180
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/post/result' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {operation_id: $('When Draft Claimed').item.json.operation_id, attempt: $('When Draft Claimed').item.json.attempt, status: 'accepted', accounting_id: $('Create Simulated Draft').item.json.body.accounting_id} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "38a07762-4511-5b54-b290-c3845b9959e8",
+      "name": "Archive Posted Demo Invoice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        200,
+        -200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/invoices/' + $('When Draft Claimed').item.json.invoice_id + '/archive' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {operation_id: $('When Draft Claimed').item.json.operation_id} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "da0bfc54-040d-5d91-9bb9-b63f07f9c4a0",
+      "name": "Outcome Uncertain?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -40,
+        20
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "223ddf78-8605-5b0e-8fff-69ca107deedb",
+              "leftValue": "={{ $json.statusCode === 408 || $json.statusCode === 429 || $json.statusCode >= 500 || $json.body.status === 'timeout' || ($json.body.status === 'accepted' && !$json.body.accounting_id) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "128601f1-5a3e-5b9c-8a42-f6bee4c77830",
+      "name": "Record Uncertain Write",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        200,
+        -20
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/post/result' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {operation_id: $('When Draft Claimed').item.json.operation_id, attempt: $('When Draft Claimed').item.json.attempt, status: 'uncertain', error: $('Create Simulated Draft').item.json.body?.error || 'provider_timeout'} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "6565814c-9c56-5460-913e-fd33e9f6643c",
+      "name": "Credential Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        200,
+        140
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7daaf6dd-a24d-5e5a-b32c-df80a62d3666",
+              "leftValue": "={{ $json.statusCode === 401 || $json.statusCode === 403 || $json.body.status === 'credential_error' }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "3f2ce7a0-557c-567c-a182-023f7d3cb407",
+      "name": "Record Credential Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/post/result' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {operation_id: $('When Draft Claimed').item.json.operation_id, attempt: $('When Draft Claimed').item.json.attempt, status: 'credential_error', error: $('Create Simulated Draft').item.json.body?.error || 'provider_authentication_failed'} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "d85894e4-7e1a-571d-89fc-63c8afadfd26",
+      "name": "Record Declined Write",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        220
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/post/result' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {operation_id: $('When Draft Claimed').item.json.operation_id, attempt: $('When Draft Claimed').item.json.attempt, status: 'declined', error: $('Create Simulated Draft').item.json.body?.error || 'provider_rejected'} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "a875571b-331e-5cb4-9659-003499d05318",
+      "name": "Record Network Uncertainty",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -280,
+        180
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/post/result' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {operation_id: $('When Draft Claimed').item.json.operation_id, attempt: $('When Draft Claimed').item.json.attempt, status: 'uncertain', error: $json.error?.message || 'network_timeout'} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When Draft Claimed": {
+      "main": [
+        [
+          {
+            "node": "Create Simulated Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Simulated Draft": {
+      "main": [
+        [
+          {
+            "node": "Draft Accepted?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Network Uncertainty",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft Accepted?": {
+      "main": [
+        [
+          {
+            "node": "Record Draft Created",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Outcome Uncertain?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Draft Created": {
+      "main": [
+        [
+          {
+            "node": "Archive Posted Demo Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outcome Uncertain?": {
+      "main": [
+        [
+          {
+            "node": "Record Uncertain Write",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Credential Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Credential Error?": {
+      "main": [
+        [
+          {
+            "node": "Record Credential Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Declined Write",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "59bb66e7d1495c09"
+  },
+  "versionId": "2051a346-6bb3-5572-8be2-cda122e2cbce",
+  "pinData": {},
+  "tags": []
+}

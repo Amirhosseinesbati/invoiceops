@@ -1,0 +1,20 @@
+.venv/
+.uv-cache/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+node_modules/
+dist/
+.env
+data/
+!data/.gitkeep
+generated/
+tmp/
+evaluation_private/
+*.log
+*.sqlite3
+screenshots/tmp/
+
+# Local product brief; excluded from the public portfolio repository.
+/10-n8n-invoiceops.md

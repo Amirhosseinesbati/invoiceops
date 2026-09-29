@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python, migrations, and tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      DATABASE_URL: postgresql+psycopg://invoiceops:ci-only-password@localhost:5432/invoiceops
+      CHECKPOINT_URL: postgresql://invoiceops:ci-only-password@localhost:5432/invoiceops
+      MODE: DEMO
+      ENABLE_WORKER: "false"
+      INTERNAL_TOKEN: ci-only-internal-token
+      SESSION_SECRET: ci-only-session-secret
+      PYTHONPATH: apps/api
+    services:
+      postgres:
+        image: postgres:17.6-bookworm
+        env:
+          POSTGRES_DB: invoiceops
+          POSTGRES_USER: invoiceops
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U invoiceops -d invoiceops"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Install locked Python dependencies
+        run: uv sync --frozen --group dev
+      - name: Check OpenAPI snapshot is current
+        run: |
+          uv run --frozen python scripts/export_openapi.py
+          git diff --exit-code -- apps/web/src/api/openapi.json
+      - name: Lint Python for errors and unused names
+        run: uv run --frozen ruff check --select E4,E7,E9,F apps/api scripts evals tests migrations
+      - name: Type-check typed domain and evaluation code
+        run: uv run --frozen mypy --ignore-missing-imports apps/api/invoiceops/domain.py evals/runner.py
+      - name: Verify business migration upgrade and downgrade
+        shell: bash
+        run: |
+          uv run --frozen alembic upgrade head
+          uv run --frozen python - <<'PY'
+          from sqlalchemy import create_engine, inspect
+          from invoiceops.config import get_settings
+
+          engine = create_engine(get_settings().database_url)
+          tables = set(inspect(engine).get_table_names())
+          required = {"workspaces", "invoices", "invoice_versions", "approvals", "posting_operations"}
+          assert required <= tables, f"Missing business tables: {sorted(required - tables)}"
+          engine.dispose()
+          PY
+          uv run --frozen alembic downgrade base
+          uv run --frozen alembic upgrade head
+      - name: Generate small visible-document fixtures
+        run: uv run --frozen python scripts/generate_invoiceops_data.py --mode fast --seed 10410 --reference-date 2026-09-28 --output-dir generated/invoiceops_fast
+      - name: Run Python tests
+        run: uv run --frozen pytest -q
+
+  web:
+    name: Web lint, types, and build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - name: Install locked web dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check generated OpenAPI types are current
+        run: |
+          pnpm generate:api
+          git diff --exit-code -- src/api/openapi.generated.ts
+      - name: Lint web source
+        run: pnpm lint
+      - name: Type-check web source
+        run: pnpm typecheck
+      - name: Build web client
+        run: pnpm build

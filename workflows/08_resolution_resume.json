@@ -1,0 +1,321 @@
+{
+  "id": "c9ead4e7fda85ab6",
+  "name": "InvoiceOps | Resolution Resume",
+  "nodes": [
+    {
+      "id": "32bcf4d3-a71e-5efa-931a-05a9ca738ba5",
+      "name": "Resolution resume note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -320
+      ],
+      "parameters": {
+        "content": "## Resolved exception callback\nThe portal commits the resolution first. n8n fetches current routing policy, and the gateway rechecks the callback's validation version and all blocking findings before creating approvals.",
+        "height": 190,
+        "width": 480
+      }
+    },
+    {
+      "id": "11a6873b-293f-5d1a-b75d-4bc2b41cf376",
+      "name": "Receive Resolved Exception",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -760,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "invoiceops-resolution",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "7321e354-d588-5675-92eb-13f58af3632e",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "cf45acfc-5fcd-5148-8a1c-b7a88c07c184",
+      "name": "Acknowledge Resolution",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -520,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status: 'queued', invoice_id: $json.body.invoice_id} }}",
+        "options": {
+          "responseCode": 202
+        }
+      }
+    },
+    {
+      "id": "abee313e-ebed-57c3-b220-237155592d5d",
+      "name": "Read Routing State",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -280,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/invoices/' + $('Receive Resolved Exception').first().json.body.invoice_id + '/routing-state' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "e9735d72-5d57-5ca6-a613-93987ff8d268",
+      "name": "Exception Still Required?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -40,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "16d7f5b1-6742-535b-af3f-d719157ce1c8",
+              "leftValue": "={{ $json.route }}",
+              "rightValue": "exception",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ad86e02b-5f4e-57dd-a248-d2fdb716b612",
+      "name": "Keep Exception Route",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        200,
+        -200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/invoices/' + $('Receive Resolved Exception').first().json.body.invoice_id + '/route' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {route: 'exception', validation_version: $('Receive Resolved Exception').first().json.body.validation_version} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "2aef71e7-75bb-52c1-98da-1542dce8c4f1",
+      "name": "Manager Review Required?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        200,
+        20
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bb82d2e8-61b3-5ab0-b3d8-55a4fe5c23d1",
+              "leftValue": "={{ $json.route }}",
+              "rightValue": "manager_and_reviewer",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "02e41f44-66dc-56a1-8df7-64c9862db761",
+      "name": "Route Resolved Manager Case",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        -60
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/invoices/' + $('Receive Resolved Exception').first().json.body.invoice_id + '/route' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {route: 'manager_and_reviewer', validation_version: $('Receive Resolved Exception').first().json.body.validation_version} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "67e8be58-4bf3-5ec2-b08c-43e373d3bae7",
+      "name": "Route Resolved Reviewer Case",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/invoices/' + $('Receive Resolved Exception').first().json.body.invoice_id + '/route' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {route: 'reviewer', validation_version: $('Receive Resolved Exception').first().json.body.validation_version} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Receive Resolved Exception": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge Resolution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acknowledge Resolution": {
+      "main": [
+        [
+          {
+            "node": "Read Routing State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Routing State": {
+      "main": [
+        [
+          {
+            "node": "Exception Still Required?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exception Still Required?": {
+      "main": [
+        [
+          {
+            "node": "Keep Exception Route",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Manager Review Required?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manager Review Required?": {
+      "main": [
+        [
+          {
+            "node": "Route Resolved Manager Case",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Route Resolved Reviewer Case",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "59bb66e7d1495c09"
+  },
+  "versionId": "334f993f-75a8-53a1-b16a-8f6c462615e5",
+  "pinData": {},
+  "tags": []
+}

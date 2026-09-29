@@ -1,0 +1,311 @@
+{
+  "id": "93d5731cf61652ea",
+  "name": "InvoiceOps | Google Drive Intake",
+  "nodes": [
+    {
+      "id": "55a5ac02-535a-5e96-b054-4b611a28f290",
+      "name": "Drive intake note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -320
+      ],
+      "parameters": {
+        "content": "## Connected folder intake\nUnpublished until a customer-owned Google Drive OAuth credential, folder ID, and workspace ID are configured. Watches new files in the chosen folder, downloads bytes, and reuses the durable intake gate.",
+        "height": 190,
+        "width": 480
+      }
+    },
+    {
+      "id": "9931a8a4-f8a1-5126-9ecf-85466b42cc55",
+      "name": "Watch Drive Folder",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        0
+      ],
+      "parameters": {
+        "authentication": "oAuth2",
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "={{ $env.GOOGLE_DRIVE_INVOICE_FOLDER_ID }}",
+          "mode": "id"
+        },
+        "event": "fileCreated",
+        "options": {}
+      }
+    },
+    {
+      "id": "b5d10b5c-1e95-5a9f-9881-e929a186aee7",
+      "name": "Download Drive File",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -520,
+        0
+      ],
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "file",
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Watch Drive Folder').item.json.id }}",
+          "mode": "id"
+        },
+        "options": {
+          "binaryPropertyName": "data"
+        }
+      }
+    },
+    {
+      "id": "c9dea500-5649-55cd-ba62-e667154f4515",
+      "name": "Encode Drive File",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -280,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const source = $('Watch Drive Folder').item.json;\nconst item = $input.item;\nif (!item.binary?.data) throw new Error('drive_file_binary_missing');\nconst data = await this.helpers.getBinaryDataBuffer($itemIndex, 'data');\nif (data.length > 8 * 1024 * 1024) throw new Error('drive_file_exceeds_8mb');\nconst mime = data.subarray(0, 5).toString('ascii') === '%PDF-' ? 'application/pdf'\n  : data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47 ? 'image/png'\n  : data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff ? 'image/jpeg' : '';\nif (!mime) return {json: {skip: true}};\nconst sourceId = String(source.id || '');\nif (!sourceId) throw new Error('drive_file_identity_missing');\nreturn {json: {event_id: 'drive:' + sourceId, source_system: 'drive', source_id: sourceId,\n  filename: String(source.name || item.binary.data.fileName || 'invoice').slice(0, 160),\n  mime_type: mime, content_base64: data.toString('base64'),\n  received_at: source.createdTime || new Date().toISOString()}};"
+      }
+    },
+    {
+      "id": "e905a3b8-af91-50eb-af01-b24354b67a1a",
+      "name": "Supported Drive File?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -40,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b7fe007b-c6d1-5a82-8ea0-ad93748da92c",
+              "leftValue": "={{ !$json.skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "81fd8d58-0e60-5f24-b43d-252576b27643",
+      "name": "Register Drive Invoice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        200,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/intake' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {...$json, workspace_id: $env.INVOICEOPS_CONNECTED_WORKSPACE_ID} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "161edfd6-9d90-509c-95f0-2ff6a8165e08",
+      "name": "Drive Redelivery?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        -100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "94b8360a-cd06-5b64-a614-547640b65de9",
+              "leftValue": "={{ $json.duplicate }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "cdfe1445-66f9-5e4c-95aa-6b8f2f399c4f",
+      "name": "Ignore Drive Redelivery",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        680,
+        -180
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "4945bca5-a7a4-5b6a-8b80-7847580ed825",
+      "name": "Process Drive Invoice",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        680,
+        -20
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "493f098d42b456ae",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "4769c0b5-cd6b-5c3e-b4e1-85c87a501aa0",
+      "name": "Ignore Unsupported Drive File",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        200,
+        120
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Watch Drive Folder": {
+      "main": [
+        [
+          {
+            "node": "Download Drive File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Drive File": {
+      "main": [
+        [
+          {
+            "node": "Encode Drive File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encode Drive File": {
+      "main": [
+        [
+          {
+            "node": "Supported Drive File?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supported Drive File?": {
+      "main": [
+        [
+          {
+            "node": "Register Drive Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ignore Unsupported Drive File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Register Drive Invoice": {
+      "main": [
+        [
+          {
+            "node": "Drive Redelivery?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive Redelivery?": {
+      "main": [
+        [
+          {
+            "node": "Ignore Drive Redelivery",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Drive Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "59bb66e7d1495c09"
+  },
+  "versionId": "243eacba-6059-5036-ad29-31ffd6d0c340",
+  "pinData": {},
+  "tags": []
+}

@@ -1,0 +1,399 @@
+{
+  "schema_version": "1.0",
+  "n8n_version": "2.40.7",
+  "edition": "self-hosted Community compatible; built-in nodes only",
+  "import_order": [
+    "07_shared_error.json",
+    "02_process_document.json",
+    "10_finalize_document.json",
+    "04_post_demo_draft.json",
+    "09_post_xero_draft.json",
+    "01_replay_intake.json",
+    "11_job_complete_callback.json",
+    "12_recover_job_callbacks.json",
+    "03_approval_resume.json",
+    "08_resolution_resume.json",
+    "05_reconcile_drafts.json",
+    "18_reconcile_xero_drafts.json",
+    "13_recover_approved_postings.json",
+    "14_recover_pending_routes.json",
+    "17_recover_pending_archives.json",
+    "06_status_digest.json",
+    "15_imap_intake.json",
+    "16_drive_intake.json"
+  ],
+  "credential_setup": {
+    "id": "InvoiceOpsInternal",
+    "name": "InvoiceOps Internal Header",
+    "type": "httpHeaderAuth",
+    "header_name": "X-Internal-Token",
+    "value_source": "INTERNAL_TOKEN environment variable at bootstrap time"
+  },
+  "config": {
+    "INVOICEOPS_API_BASE_URL": "internal gateway origin, e.g. http://api:8000",
+    "INVOICEOPS_ACCOUNTING_PROVIDER": "demo or xero; selects posting and reconciliation branches",
+    "XERO_TENANT_ID": "customer tenant header required only for connected Xero"
+  },
+  "connected_only": [
+    "InvoiceOps | Xero Draft Post",
+    "InvoiceOps | Reconcile Xero Drafts",
+    "InvoiceOps | IMAP Intake",
+    "InvoiceOps | Google Drive Intake"
+  ],
+  "workflows": [
+    {
+      "file": "07_shared_error.json",
+      "name": "InvoiceOps | Shared Error Handler",
+      "id": "59bb66e7d1495c09",
+      "triggers": [
+        "errorTrigger"
+      ],
+      "subworkflow_ids": [],
+      "credentials": [
+        {
+          "type": "httpHeaderAuth",
+          "name": "InvoiceOps Internal Header",
+          "id": "InvoiceOpsInternal"
+        }
+      ],
+      "input": "Webhook event JSON or sub-workflow item; see node names and docs/OPERATIONS.md",
+      "output": "Persisted status in gateway; no secret resume URLs"
+    },
+    {
+      "file": "02_process_document.json",
+      "name": "InvoiceOps | Process Document",
+      "id": "493f098d42b456ae",
+      "triggers": [
+        "executeWorkflowTrigger"
+      ],
+      "subworkflow_ids": [],
+      "credentials": [
+        {
+          "type": "httpHeaderAuth",
+          "name": "InvoiceOps Internal Header",
+          "id": "InvoiceOpsInternal"
+        }
+      ],
+      "input": "Webhook event JSON or sub-workflow item; see node names and docs/OPERATIONS.md",
+      "output": "Persisted status in gateway; no secret resume URLs"
+    },
+    {
+      "file": "10_finalize_document.json",
+      "name": "InvoiceOps | Finalize Document",
+      "id": "cee20a9381065288",
+      "triggers": [
+        "executeWorkflowTrigger"
+      ],
+      "subworkflow_ids": [],
+      "credentials": [
+        {
+          "type": "httpHeaderAuth",
+          "name": "InvoiceOps Internal Header",
+          "id": "InvoiceOpsInternal"
+        }
+      ],
+      "input": "Webhook event JSON or sub-workflow item; see node names and docs/OPERATIONS.md",
+      "output": "Persisted status in gateway; no secret resume URLs"
+    },
+    {
+      "file": "04_post_demo_draft.json",
+      "name": "InvoiceOps | Post Demo Draft",
+      "id": "3eea8425d81c54c7",
+      "triggers": [
+        "executeWorkflowTrigger"
+      ],
+      "subworkflow_ids": [],
+      "credentials": [
+        {
+          "type": "httpHeaderAuth",
+          "name": "InvoiceOps Internal Header",
+          "id": "InvoiceOpsInternal"
+        }
+      ],
+      "input": "Webhook event JSON or sub-workflow item; see node names and docs/OPERATIONS.md",
+      "output": "Persisted status in gateway; no secret resume URLs"
+    },
+    {
+      "file": "09_post_xero_draft.json",
+      "name": "InvoiceOps | Xero Draft Post",
+      "id": "364e5c32cef65a73",
+      "triggers": [
+        "executeWorkflowTrigger"
+      ],
+      "subworkflow_ids": [],
+      "credentials": [
+        {
+          "type": "httpHeaderAuth",
+          "name": "InvoiceOps Internal Header",
+          "id": "InvoiceOpsInternal"
+        },
+        {
+          "type": "xeroOAuth2Api",
+          "name": "InvoiceOps Xero OAuth2",
+          "setup": "connect customer Xero demo/test organisation before publishing"
+        }
+      ],
+      "input": "Webhook event JSON or sub-workflow item; see node names and docs/OPERATIONS.md",
+      "output": "Persisted status in gateway; no secret resume URLs"
+    },
+    {
+      "file": "01_replay_intake.json",
+      "name": "InvoiceOps | Replay Intake",
+      "id": "72195cee01f2583e",
+      "triggers": [
+        "webhook"
+      ],
+      "subworkflow_ids": [
+        "493f098d42b456ae"
+      ],
+      "credentials": [
+        {
+          "type": "httpHeaderAuth",
+          "name": "InvoiceOps Internal Header",
+          "id": "InvoiceOpsInternal"
+        }
+      ],
+      "input": "Webhook event JSON or sub-workflow item; see node names and docs/OPERATIONS.md",
+      "output": "Persisted status in gateway; no secret resume URLs"
+    },
+    {
+      "file": "11_job_complete_callback.json",
+      "name": "InvoiceOps | Job Complete Callback",
+      "id": "3b4dec7b0c8e5b67",
+      "triggers": [
+        "webhook"
+      ],
+      "subworkflow_ids": [
+        "cee20a9381065288"
+      ],
+      "credentials": [
+        {
+          "type": "httpHeaderAuth",
+          "name": "InvoiceOps Internal Header",
+          "id": "InvoiceOpsInternal"
+        }
+      ],
+      "input": "Webhook event JSON or sub-workflow item; see node names and docs/OPERATIONS.md",
+      "output": "Persisted status in gateway; no secret resume URLs"
+    },
+    {
+      "file": "12_recover_job_callbacks.json",
+      "name": "InvoiceOps | Recover Job Callbacks",
+      "id": "07ae6a305daa5267",
+      "triggers": [
+        "scheduleTrigger"
+      ],
+      "subworkflow_ids": [
+        "cee20a9381065288"
+      ],
+      "credentials": [
+        {
+          "type": "httpHeaderAuth",
+          "name": "InvoiceOps Internal Header",
+          "id": "InvoiceOpsInternal"
+        }
+      ],
+      "input": "Webhook event JSON or sub-workflow item; see node names and docs/OPERATIONS.md",
+      "output": "Persisted status in gateway; no secret resume URLs"
+    },
+    {
+      "file": "03_approval_resume.json",
+      "name": "InvoiceOps | Approval Resume",
+      "id": "26f91ee11c615a61",
+      "triggers": [
+        "webhook"
+      ],
+      "subworkflow_ids": [
+        "364e5c32cef65a73",
+        "3eea8425d81c54c7"
+      ],
+      "credentials": [
+        {
+          "type": "httpHeaderAuth",
+          "name": "InvoiceOps Internal Header",
+          "id": "InvoiceOpsInternal"
+        }
+      ],
+      "input": "Webhook event JSON or sub-workflow item; see node names and docs/OPERATIONS.md",
+      "output": "Persisted status in gateway; no secret resume URLs"
+    },
+    {
+      "file": "08_resolution_resume.json",
+      "name": "InvoiceOps | Resolution Resume",
+      "id": "c9ead4e7fda85ab6",
+      "triggers": [
+        "webhook"
+      ],
+      "subworkflow_ids": [],
+      "credentials": [
+        {
+          "type": "httpHeaderAuth",
+          "name": "InvoiceOps Internal Header",
+          "id": "InvoiceOpsInternal"
+        }
+      ],
+      "input": "Webhook event JSON or sub-workflow item; see node names and docs/OPERATIONS.md",
+      "output": "Persisted status in gateway; no secret resume URLs"
+    },
+    {
+      "file": "05_reconcile_drafts.json",
+      "name": "InvoiceOps | Reconcile Drafts",
+      "id": "ade829b6e8b657b8",
+      "triggers": [
+        "scheduleTrigger"
+      ],
+      "subworkflow_ids": [],
+      "credentials": [
+        {
+          "type": "httpHeaderAuth",
+          "name": "InvoiceOps Internal Header",
+          "id": "InvoiceOpsInternal"
+        }
+      ],
+      "input": "Webhook event JSON or sub-workflow item; see node names and docs/OPERATIONS.md",
+      "output": "Persisted status in gateway; no secret resume URLs"
+    },
+    {
+      "file": "18_reconcile_xero_drafts.json",
+      "name": "InvoiceOps | Reconcile Xero Drafts",
+      "id": "2f72b4f25aec57d1",
+      "triggers": [
+        "scheduleTrigger"
+      ],
+      "subworkflow_ids": [],
+      "credentials": [
+        {
+          "type": "httpHeaderAuth",
+          "name": "InvoiceOps Internal Header",
+          "id": "InvoiceOpsInternal"
+        },
+        {
+          "type": "xeroOAuth2Api",
+          "name": "InvoiceOps Xero OAuth2",
+          "setup": "connect customer Xero demo/test organisation before publishing"
+        }
+      ],
+      "input": "Webhook event JSON or sub-workflow item; see node names and docs/OPERATIONS.md",
+      "output": "Persisted status in gateway; no secret resume URLs"
+    },
+    {
+      "file": "13_recover_approved_postings.json",
+      "name": "InvoiceOps | Recover Approved Postings",
+      "id": "e61c44cbdea95eb4",
+      "triggers": [
+        "scheduleTrigger"
+      ],
+      "subworkflow_ids": [
+        "364e5c32cef65a73",
+        "3eea8425d81c54c7"
+      ],
+      "credentials": [
+        {
+          "type": "httpHeaderAuth",
+          "name": "InvoiceOps Internal Header",
+          "id": "InvoiceOpsInternal"
+        }
+      ],
+      "input": "Webhook event JSON or sub-workflow item; see node names and docs/OPERATIONS.md",
+      "output": "Persisted status in gateway; no secret resume URLs"
+    },
+    {
+      "file": "14_recover_pending_routes.json",
+      "name": "InvoiceOps | Recover Pending Routes",
+      "id": "486daba9c81759ff",
+      "triggers": [
+        "scheduleTrigger"
+      ],
+      "subworkflow_ids": [],
+      "credentials": [
+        {
+          "type": "httpHeaderAuth",
+          "name": "InvoiceOps Internal Header",
+          "id": "InvoiceOpsInternal"
+        }
+      ],
+      "input": "Webhook event JSON or sub-workflow item; see node names and docs/OPERATIONS.md",
+      "output": "Persisted status in gateway; no secret resume URLs"
+    },
+    {
+      "file": "17_recover_pending_archives.json",
+      "name": "InvoiceOps | Recover Pending Archives",
+      "id": "8d040ee09c6e5059",
+      "triggers": [
+        "scheduleTrigger"
+      ],
+      "subworkflow_ids": [],
+      "credentials": [
+        {
+          "type": "httpHeaderAuth",
+          "name": "InvoiceOps Internal Header",
+          "id": "InvoiceOpsInternal"
+        }
+      ],
+      "input": "Webhook event JSON or sub-workflow item; see node names and docs/OPERATIONS.md",
+      "output": "Persisted status in gateway; no secret resume URLs"
+    },
+    {
+      "file": "06_status_digest.json",
+      "name": "InvoiceOps | Status Digest",
+      "id": "1d06d6198c3c5c93",
+      "triggers": [
+        "scheduleTrigger"
+      ],
+      "subworkflow_ids": [],
+      "credentials": [
+        {
+          "type": "httpHeaderAuth",
+          "name": "InvoiceOps Internal Header",
+          "id": "InvoiceOpsInternal"
+        }
+      ],
+      "input": "Webhook event JSON or sub-workflow item; see node names and docs/OPERATIONS.md",
+      "output": "Persisted status in gateway; no secret resume URLs"
+    },
+    {
+      "file": "15_imap_intake.json",
+      "name": "InvoiceOps | IMAP Intake",
+      "id": "f992d28bdd435601",
+      "triggers": [],
+      "subworkflow_ids": [
+        "493f098d42b456ae"
+      ],
+      "credentials": [
+        {
+          "type": "httpHeaderAuth",
+          "name": "InvoiceOps Internal Header",
+          "id": "InvoiceOpsInternal"
+        },
+        {
+          "type": "imap",
+          "setup": "connect customer-owned IMAP mailbox before publishing"
+        }
+      ],
+      "input": "Webhook event JSON or sub-workflow item; see node names and docs/OPERATIONS.md",
+      "output": "Persisted status in gateway; no secret resume URLs"
+    },
+    {
+      "file": "16_drive_intake.json",
+      "name": "InvoiceOps | Google Drive Intake",
+      "id": "93d5731cf61652ea",
+      "triggers": [],
+      "subworkflow_ids": [
+        "493f098d42b456ae"
+      ],
+      "credentials": [
+        {
+          "type": "httpHeaderAuth",
+          "name": "InvoiceOps Internal Header",
+          "id": "InvoiceOpsInternal"
+        },
+        {
+          "type": "googleDriveOAuth2Api",
+          "setup": "connect customer-owned Google Drive OAuth2 credential to trigger and download nodes before publishing"
+        }
+      ],
+      "input": "Webhook event JSON or sub-workflow item; see node names and docs/OPERATIONS.md",
+      "output": "Persisted status in gateway; no secret resume URLs"
+    }
+  ]
+}

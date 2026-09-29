@@ -1,0 +1,53 @@
+{
+  "project": "InvoiceOps",
+  "run_date": "2026-09-28",
+  "measurement": "synthetic DEMO visible-text/OCR header extraction",
+  "seed": 10410,
+  "reference_date": "2026-09-28",
+  "header_fields": [
+    "vendor_name", "invoice_number", "invoice_date", "due_date",
+    "po_number", "currency", "subtotal", "tax", "total"
+  ],
+  "development": {
+    "scenarios": 30,
+    "observations": 30,
+    "supported_documents": 30,
+    "correct": 270,
+    "predicted_nonempty": 270,
+    "expected": 270,
+    "native": { "correct": 243, "predicted_nonempty": 243, "expected": 243 },
+    "scanned": { "correct": 27, "predicted_nonempty": 27, "expected": 27 }
+  },
+  "held_out": {
+    "scenarios": 70,
+    "observations": 70,
+    "supported_documents": 67,
+    "correct": 601,
+    "predicted_nonempty": 603,
+    "expected": 603,
+    "precision": 0.996683,
+    "recall": 0.996683,
+    "native": { "correct": 486, "predicted_nonempty": 486, "expected": 486 },
+    "scanned": { "correct": 115, "predicted_nonempty": 117, "expected": 117 },
+    "layouts": {
+      "boxed_totals": { "correct": 160, "predicted_nonempty": 162, "expected": 162 },
+      "header_band": { "correct": 144, "predicted_nonempty": 144, "expected": 144 },
+      "minimal_statement": { "correct": 117, "predicted_nonempty": 117, "expected": 117 },
+      "modern_split": { "correct": 45, "predicted_nonempty": 45, "expected": 45 },
+      "warehouse_slip": { "correct": 135, "predicted_nonempty": 135, "expected": 135 }
+    },
+    "field_errors": { "vendor_name": 2 },
+    "other_field_errors": 0
+  },
+  "operational_scenario_scoring": {
+    "status_measured": 0,
+    "blocking_finding_measured": 0,
+    "approval_roles_measured": 0,
+    "draft_bill_count_measured": 0
+  },
+  "limitations": [
+    "Synthetic supported documents only; three held-out documents were excluded from the supported-header target.",
+    "The collector used the deterministic DEMO parser and Tesseract in the API container; no live model or Xero request was made.",
+    "The full scenario operational score and human-reviewed real-document sample remain unmeasured."
+  ]
+}

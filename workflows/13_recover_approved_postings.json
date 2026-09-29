@@ -1,0 +1,296 @@
+{
+  "id": "e61c44cbdea95eb4",
+  "name": "InvoiceOps | Recover Approved Postings",
+  "nodes": [
+    {
+      "id": "6d626ac2-efe8-5e87-bf23-e43ce9080111",
+      "name": "Approved recovery note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -320
+      ],
+      "parameters": {
+        "content": "## Recover committed approvals\nThe portal callback is best effort. This schedule finds approved invoices with no posting operation and submits them through the same atomic claim gate. An existing claim is never recreated here.",
+        "height": 190,
+        "width": 480
+      }
+    },
+    {
+      "id": "238bd742-b8a7-5a64-a612-1bb91a2a7aca",
+      "name": "Every Two Minutes For Approvals",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -760,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "59f9fb72-441b-5c98-bf1a-af34c435450c",
+      "name": "List Pending Postings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -520,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/recovery/pending-postings' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "a11842be-66eb-5cf6-b8e9-17c4ba127616",
+      "name": "Claim Recovered Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -280,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/post/claim' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ {invoice_id: $json.invoice_id} }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "f514cce6-ea57-5213-8eee-8691959d3953",
+      "name": "Recovered Claim Granted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -40,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f55c6e3b-198f-5b9b-a21c-4b1347d7a064",
+              "leftValue": "={{ $json.claimed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "2c9cd442-ba26-562b-95ca-5f07dc7dddc8",
+      "name": "Use Xero For Recovered Posting?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        200,
+        -100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4cade220-efb0-52ff-be58-6a564cf74deb",
+              "leftValue": "={{ $env.INVOICEOPS_ACCOUNTING_PROVIDER || 'demo' }}",
+              "rightValue": "xero",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "630259ed-70d1-5869-ad6e-cf89f50e9287",
+      "name": "Post Recovered Xero Draft",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        440,
+        -200
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "364e5c32cef65a73",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "f770bc3b-0dc7-5432-80e0-5e182daf43e9",
+      "name": "Post Recovered Demo Draft",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "3eea8425d81c54c7",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "bd5b3dea-c635-57fa-943c-75313d2ca05c",
+      "name": "Recovered Claim Blocked",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        200,
+        100
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Every Two Minutes For Approvals": {
+      "main": [
+        [
+          {
+            "node": "List Pending Postings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Pending Postings": {
+      "main": [
+        [
+          {
+            "node": "Claim Recovered Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Recovered Draft": {
+      "main": [
+        [
+          {
+            "node": "Recovered Claim Granted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recovered Claim Granted?": {
+      "main": [
+        [
+          {
+            "node": "Use Xero For Recovered Posting?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Recovered Claim Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Xero For Recovered Posting?": {
+      "main": [
+        [
+          {
+            "node": "Post Recovered Xero Draft",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Post Recovered Demo Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "59bb66e7d1495c09"
+  },
+  "versionId": "8cb8fdd7-b998-511f-89c7-7850849648f2",
+  "pinData": {},
+  "tags": []
+}

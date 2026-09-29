@@ -1,0 +1,121 @@
+{
+  "id": "07ae6a305daa5267",
+  "name": "InvoiceOps | Recover Job Callbacks",
+  "nodes": [
+    {
+      "id": "3ab828c5-1b45-5ec1-aa91-ee1dda3b27f6",
+      "name": "Job recovery note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -320
+      ],
+      "parameters": {
+        "content": "## Recover lost callbacks\nThe gateway lists completed or failed jobs without a finalizer ACK. Each item runs the same finalizer as the callback; the durable ACK is written only after route/failure persistence.",
+        "height": 190,
+        "width": 480
+      }
+    },
+    {
+      "id": "8bc8619e-1ac7-5813-8441-3e82debdedd5",
+      "name": "Every Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -760,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "7824db4f-b3a5-5a31-bb6e-e4ee977c0b27",
+      "name": "List Unacknowledged Jobs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -520,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/jobs/pending-completions' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "7427a504-5543-5048-a3b4-1b45caf5e544",
+      "name": "Finalize Recovered Job",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -280,
+        0
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "cee20a9381065288",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every Minute": {
+      "main": [
+        [
+          {
+            "node": "List Unacknowledged Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Unacknowledged Jobs": {
+      "main": [
+        [
+          {
+            "node": "Finalize Recovered Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "59bb66e7d1495c09"
+  },
+  "versionId": "85656d5a-7c94-5705-837b-b4b62acd1df9",
+  "pinData": {},
+  "tags": []
+}

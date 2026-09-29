@@ -1,0 +1,125 @@
+{
+  "id": "8d040ee09c6e5059",
+  "name": "InvoiceOps | Recover Pending Archives",
+  "nodes": [
+    {
+      "id": "8d7c7c70-3771-55a9-8dbb-e1b15f1ec366",
+      "name": "Archive recovery note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -320
+      ],
+      "parameters": {
+        "content": "## Complete accepted drafts\nThe posting result is durable before archiving. This schedule retries only the idempotent archive write for draft-created invoices with no archive record.",
+        "height": 190,
+        "width": 480
+      }
+    },
+    {
+      "id": "11566f4c-ecf1-5a81-9f54-a7ba4d9afaf7",
+      "name": "Every Two Minutes For Archives",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -760,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f3a628c7-308a-56f3-96f2-da00466b785b",
+      "name": "List Pending Archives",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -520,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/recovery/pending-archives' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "918a24d0-2c1a-50d6-a361-4042b4956a18",
+      "name": "Archive Recovered Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -280,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INVOICEOPS_API_BASE_URL + '/internal/invoices/' + $json.invoice_id + '/archive' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every Two Minutes For Archives": {
+      "main": [
+        [
+          {
+            "node": "List Pending Archives",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Pending Archives": {
+      "main": [
+        [
+          {
+            "node": "Archive Recovered Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "59bb66e7d1495c09"
+  },
+  "versionId": "13916042-b0a2-57b2-8112-70459ed99305",
+  "pinData": {},
+  "tags": []
+}

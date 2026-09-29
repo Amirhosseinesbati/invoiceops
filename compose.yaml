@@ -1,0 +1,116 @@
+name: invoiceops
+services:
+  postgres:
+    image: postgres:17.6-bookworm
+    environment:
+      POSTGRES_USER: invoiceops
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: invoiceops
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U invoiceops -d invoiceops"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  generator:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: ["uv", "run", "--frozen", "python", "scripts/generate_invoiceops_data.py", "--mode", "fast", "--output-dir", "/app/generated/invoiceops_fast", "--reference-date", "${REFERENCE_DATE:-2026-09-28}"]
+    volumes:
+      - ./generated:/app/generated
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://invoiceops:${POSTGRES_PASSWORD}@postgres:5432/invoiceops
+      CHECKPOINT_URL: postgresql://invoiceops:${POSTGRES_PASSWORD}@postgres:5432/invoiceops
+      DATA_DIR: /app/data
+    volumes:
+      - ./data:/app/data
+      - ./generated/invoiceops_fast/public:/app/generated/public:ro
+      - ./generated/invoiceops_fast/documents:/app/generated/documents:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      generator:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "uv", "run", "--frozen", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.40.7
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: invoiceops
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?Set N8N_ENCRYPTION_KEY in .env}
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://localhost:${N8N_HOST_PORT:-5678}/
+      GENERIC_TIMEZONE: UTC
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      INVOICEOPS_API_BASE_URL: http://api:8000
+      INVOICEOPS_ACCOUNTING_PROVIDER: ${INVOICEOPS_ACCOUNTING_PROVIDER:-demo}
+      XERO_TENANT_ID: ${XERO_TENANT_ID:-}
+      INVOICEOPS_CONNECTED_WORKSPACE_ID: ${INVOICEOPS_CONNECTED_WORKSPACE_ID:-}
+      GOOGLE_DRIVE_INVOICE_FOLDER_ID: ${GOOGLE_DRIVE_INVOICE_FOLDER_ID:-}
+      N8N_RUNNERS_ENABLED: "true"
+    ports:
+      - "127.0.0.1:${N8N_HOST_PORT:-5678}:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./workflows:/workflows:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  demo-mail:
+    image: greenmail/standalone:2.1.13
+    profiles: ["demo-mail"]
+    environment:
+      GREENMAIL_OPTS: >-
+        -Dgreenmail.setup.test.smtp
+        -Dgreenmail.setup.test.imap
+        -Dgreenmail.hostname=0.0.0.0
+        -Dgreenmail.users=ap:demo-mail@invoiceops.test,ops:demo-mail@invoiceops.test
+      JAVA_OPTS: -Djava.net.preferIPv4Stack=true -Xms32m -Xmx128m
+    ports:
+      - "127.0.0.1:3025:3025"
+      - "127.0.0.1:3143:3143"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./apps/web
+      args:
+        VITE_DEMO_ACCESS_HINT: "true"
+    ports:
+      - "127.0.0.1:${WEB_HOST_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  n8n_data:

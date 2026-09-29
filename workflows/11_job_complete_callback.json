@@ -1,0 +1,157 @@
+{
+  "id": "3b4dec7b0c8e5b67",
+  "name": "InvoiceOps | Job Complete Callback",
+  "nodes": [
+    {
+      "id": "d81dfb57-76b7-5974-b2fb-e588684dbdd5",
+      "name": "Job callback note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -320
+      ],
+      "parameters": {
+        "content": "## Authenticated completion callback\nThe extractor worker posts only IDs through Header Auth. n8n acknowledges promptly, then the reusable finalizer rechecks the persisted job state and routes the invoice.",
+        "height": 190,
+        "width": 480
+      }
+    },
+    {
+      "id": "c63f6b99-c4e7-54d8-96f2-ce9e6445ad22",
+      "name": "Receive Job Completion",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -760,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "invoiceops-job-complete",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "3f627fad-ddf3-5471-a0dc-eec1bab7ac54",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "InvoiceOpsInternal",
+          "name": "InvoiceOps Internal Header"
+        }
+      }
+    },
+    {
+      "id": "53814866-f5ab-56b0-a293-754c3472cd93",
+      "name": "Acknowledge Job Callback",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -520,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {status: 'queued', job_id: $json.body.job_id} }}",
+        "options": {
+          "responseCode": 202
+        }
+      }
+    },
+    {
+      "id": "a4c3456d-f7b9-5685-9e7b-8341bc1ddcb2",
+      "name": "Prepare Completion IDs",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -280,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8a69a329-1be7-533c-8659-f37a64115547",
+              "name": "job_id",
+              "type": "string",
+              "value": "={{ $('Receive Job Completion').first().json.body.job_id }}"
+            },
+            {
+              "id": "04351d7e-d622-5501-a856-26e34ec9a7ae",
+              "name": "invoice_id",
+              "type": "string",
+              "value": "={{ $('Receive Job Completion').first().json.body.invoice_id }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "4ea2d187-e1fd-54ca-bea0-23f67b83c656",
+      "name": "Finalize Callback Job",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -40,
+        0
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "cee20a9381065288",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Receive Job Completion": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge Job Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acknowledge Job Callback": {
+      "main": [
+        [
+          {
+            "node": "Prepare Completion IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Completion IDs": {
+      "main": [
+        [
+          {
+            "node": "Finalize Callback Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "59bb66e7d1495c09"
+  },
+  "versionId": "a5a3efa8-a7ab-5f5f-bab4-8e25d75f794f",
+  "pinData": {},
+  "tags": []
+}

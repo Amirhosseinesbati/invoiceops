@@ -1,0 +1,43 @@
+[project]
+name = "invoiceops"
+version = "0.1.0"
+description = "Self-hosted invoice intake and approval pilot coordinated by n8n"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "alembic>=1.16,<2",
+  "fastapi>=0.116,<1",
+  "httpx>=0.28,<1",
+  "langchain>=1.2,<2",
+  "langchain-core>=1.2,<2",
+  "langchain-openai>=1,<2",
+  "langgraph>=1,<2",
+  "langgraph-checkpoint-postgres>=3,<4",
+  "pydantic-settings>=2.10,<3",
+  "pillow>=11,<13",
+  "pwdlib[argon2]>=0.2,<1",
+  "psycopg[binary,pool]>=3.2,<4",
+  "pymupdf>=1.26,<2",
+  "pypdf>=6,<7",
+  "reportlab>=4,<5",
+  "python-multipart>=0.0.20,<1",
+  "sqlalchemy>=2.0,<3",
+  "uvicorn[standard]>=0.35,<1",
+]
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "ruff>=0.12,<1", "mypy>=1.17,<2", "pdfplumber>=0.11,<1"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["apps/api", "."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501", "B008"]
