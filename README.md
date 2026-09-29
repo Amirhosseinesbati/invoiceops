@@ -2,9 +2,9 @@
 
 > A reviewable accounts-payable workflow coordinated by n8n.
 
-![InvoiceOps workflow overview: intake, extraction, matching, review, approval, and draft posting](docs/assets/workflow-overview.svg)
+![InvoiceOps review drawer showing a synthetic invoice, extracted fields, and a price-match exception](docs/screenshots/01-invoice-review-real-demo.png)
 
-*Workflow illustration of the local DEMO; this is not a screenshot of the portal.*
+*Actual portal capture from the locally running DEMO on 2026-09-29. Invoice, vendor, PO, and receipt data are synthetic.*
 
 [Getting started](#getting-started) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation](docs/EVALUATION.md) · [Security](docs/SECURITY.md)
 
@@ -17,6 +17,14 @@ Current implementation and test evidence are in [docs/IMPLEMENTATION_STATUS.md](
 ### Core workflow
 
 **Invoice intake → extraction → PO match → approval → draft bill → archive**
+
+![InvoiceOps finance inbox showing five synthetic invoices and their review states](docs/screenshots/02-finance-inbox-real-demo.png)
+
+*Finance inbox in the same local DEMO. The screenshot illustrates the UI and seeded workflow states; it is not a live accounting integration.*
+
+![InvoiceOps workflow overview: intake, extraction, matching, review, approval, and draft posting](docs/assets/workflow-overview.svg)
+
+*Workflow illustration; the two images above are actual portal captures.*
 
 ### Capabilities
 
