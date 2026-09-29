@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="470" viewBox="0 0 1440 470" role="img" aria-labelledby="title desc">
+  <title id="title">InvoiceOps workflow overview</title>
+  <desc id="desc">Six stages: receive an invoice, extract fields, match purchase orders, review exceptions, approve an exact version, and create a draft bill.</desc>
+  <defs>
+    <linearGradient id="bg" x2="1" y2="1">
+      <stop stop-color="#102a3e"/>
+      <stop offset="1" stop-color="#173f51"/>
+    </linearGradient>
+    <linearGradient id="accent" x2="1" y2="0">
+      <stop stop-color="#6ee7c3"/>
+      <stop offset="1" stop-color="#a8e8dc"/>
+    </linearGradient>
+  </defs>
+  <rect width="1440" height="470" rx="24" fill="url(#bg)"/>
+  <circle cx="1340" cy="65" r="190" fill="#ffffff" opacity=".035"/>
+  <circle cx="95" cy="425" r="155" fill="#6ee7c3" opacity=".045"/>
+  <text x="56" y="73" fill="#6ee7c3" font-family="Arial, sans-serif" font-size="17" font-weight="700" letter-spacing="3">INVOICEOPS / WORKFLOW</text>
+  <text x="56" y="122" fill="#ffffff" font-family="Arial, sans-serif" font-size="38" font-weight="700">From incoming invoice to a reviewable draft bill</text>
+  <text x="56" y="157" fill="#bdd4dc" font-family="Arial, sans-serif" font-size="18">Human decisions remain explicit; the accounting action stays in draft.</text>
+  <g font-family="Arial, sans-serif">
+    <g fill="#ffffff" fill-opacity=".075" stroke="#7898a6" stroke-opacity=".36">
+      <rect x="56" y="217" width="206" height="158" rx="16"/>
+      <rect x="280" y="217" width="206" height="158" rx="16"/>
+      <rect x="504" y="217" width="206" height="158" rx="16"/>
+      <rect x="728" y="217" width="206" height="158" rx="16"/>
+      <rect x="952" y="217" width="206" height="158" rx="16"/>
+      <rect x="1176" y="217" width="206" height="158" rx="16"/>
+    </g>
+    <g fill="url(#accent)" font-size="17" font-weight="700">
+      <text x="76" y="254">01</text><text x="300" y="254">02</text><text x="524" y="254">03</text>
+      <text x="748" y="254">04</text><text x="972" y="254">05</text><text x="1196" y="254">06</text>
+    </g>
+    <g fill="#ffffff" font-size="22" font-weight="700">
+      <text x="76" y="293">Receive</text><text x="300" y="293">Extract</text><text x="524" y="293">Match</text>
+      <text x="748" y="293">Review</text><text x="972" y="293">Approve</text><text x="1196" y="293">Draft bill</text>
+    </g>
+    <g fill="#bdd4dc" font-size="15">
+      <text x="76" y="328">n8n intake</text><text x="300" y="328">Document fields</text><text x="524" y="328">POs and receipts</text>
+      <text x="748" y="328">Exceptions</text><text x="972" y="328">Exact version</text><text x="1196" y="328">Local simulator</text>
+    </g>
+    <g fill="#6ee7c3" font-size="24" font-weight="700">
+      <text x="263" y="307">›</text><text x="487" y="307">›</text><text x="711" y="307">›</text>
+      <text x="935" y="307">›</text><text x="1159" y="307">›</text>
+    </g>
+  </g>
+  <text x="56" y="425" fill="#9dbfc9" font-family="Arial, sans-serif" font-size="15">Illustration of the implemented DEMO flow · Synthetic data · Connected providers require separate verification</text>
+</svg>

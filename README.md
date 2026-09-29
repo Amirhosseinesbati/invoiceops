@@ -2,6 +2,10 @@
 
 > A reviewable accounts-payable workflow coordinated by n8n.
 
+![InvoiceOps workflow overview: intake, extraction, matching, review, approval, and draft posting](docs/assets/workflow-overview.svg)
+
+*Workflow illustration of the local DEMO; this is not a screenshot of the portal.*
+
 [Getting started](#getting-started) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation](docs/EVALUATION.md) · [Security](docs/SECURITY.md)
 
 ## Overview
